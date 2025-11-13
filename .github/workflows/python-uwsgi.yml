@@ -1,0 +1,46 @@
+name: Python + uWSGI CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      project-name:
+        description: 'Project name to initialize'
+        required: true
+        default: 'my-project'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python (latest 3.x)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install --upgrade pip
+            pip install uwsgi
+          fi
+
+      - name: Run uvx init
+        env:
+          PROJECT_NAME: ${{ github.event.inputs.project-name }}
+        run: |
+          echo "Running uvx specify init for project '$PROJECT_NAME'"
+          uvx --from git+https://github.com/github/spec-kit.git specify init "$PROJECT_NAME"
