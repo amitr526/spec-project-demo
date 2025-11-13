@@ -123,8 +123,8 @@ jobs:
           fi
           
           # export branch name for subsequent steps
-          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
-          
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
+                    
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
