@@ -103,9 +103,6 @@ jobs:
       - name: Commit and push generated files
         id: commit
         run: |
-          # Move generated project to projects directory
-          mkdir -p projects
-          mv "$PROJECT_NAME" projects/ || true
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
