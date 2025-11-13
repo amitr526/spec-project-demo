@@ -37,6 +37,14 @@ jobs:
         with:
           persist-credentials: true
 
+      - name: Export workflow inputs to env
+        run: |
+          echo "PROJECT_NAME=${{ github.event.inputs['project-name'] }}" >> $GITHUB_ENV
+          echo "FEATURE_DESC=${{ github.event.inputs['feature-description'] }}" >> $GITHUB_ENV
+          echo "PLAN_PROMPT=${{ github.event.inputs['plan-prompt'] }}" >> $GITHUB_ENV
+          echo "TASKS_OPTS=${{ github.event.inputs['tasks-options'] }}" >> $GITHUB_ENV
+          echo "GENERATE_TASKS=${{ github.event.inputs['generate-tasks'] }}" >> $GITHUB_ENV
+
       - name: Set up Python (latest 3.x)
         uses: actions/setup-python@v4
         with:
@@ -56,57 +64,26 @@ jobs:
             pip install -r requirements.txt
           else
             pip install --upgrade pip
-            pip install uwsgi
+            pip install uwsgi uv
           fi
 
       - name: Install spec-kit
         run: |
-          pip install --upgrade pip
-          pip install git+https://github.com/github/spec-kit.git
+          uv tool install specify-cli --force --from git+https://github.com/github/spec-kit.git
 
-      - name: Install uv
+      - name: Run uvx init
         run: |
-          pip install --upgrade pip
-          pip install uv
+          specify init "$PROJECT_NAME"
 
       - name: Run speckit.specify
-        env:
-          FEATURE_DESC: ${{ github.event.inputs['feature-description'] }}
         run: |
-          if [ -n "$FEATURE_DESC" ]; then
-            echo "Running speckit.specify with description: $FEATURE_DESC"
-            uvx --from git+https://github.com/github/spec-kit.git specify "$FEATURE_DESC"
-          else
-            echo "No feature-description provided; skipping speckit.specify"
-          fi
+          specify specify "$FEATURE_DESC"
 
       - name: Run speckit.plan
-        env:
-          PLAN_PROMPT: ${{ github.event.inputs['plan-prompt'] }}
         run: |
-          if [ -n "$PLAN_PROMPT" ]; then
-            echo "Running speckit.plan with prompt: $PLAN_PROMPT"
-            uvx --from git+https://github.com/github/spec-kit.git plan "$PLAN_PROMPT"
-          else
-            echo "Running speckit.plan with default (reading spec from repo)"
-            uvx --from git+https://github.com/github/spec-kit.git plan
-          fi
+          specify plan "$PLAN_PROMPT"
 
       - name: Run speckit.tasks
         if: ${{ github.event.inputs['generate-tasks'] == 'true' }}
-        env:
-          TASKS_OPTS: ${{ github.event.inputs['tasks-options'] }}
         run: |
-          echo "Running speckit.tasks with options: $TASKS_OPTS"
-          if [ -n "$TASKS_OPTS" ]; then
-            uvx --from git+https://github.com/github/spec-kit.git tasks "$TASKS_OPTS"
-          else
-            uvx --from git+https://github.com/github/spec-kit.git tasks
-          fi
-
-      - name: Run uvx init
-        env:
-          PROJECT_NAME: ${{ github.event.inputs['project-name'] }}
-        run: |
-          echo "Running uvx specify init for project '$PROJECT_NAME'"
-          uvx --from git+https://github.com/github/spec-kit.git specify init "$PROJECT_NAME"
+          specify tasks "$TASKS_OPTS"
