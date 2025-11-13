@@ -1,0 +1,112 @@
+name: Python + uWSGI CI
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      project-name:
+        description: 'Project name to initialize'
+        required: true
+        default: 'my-project'
+      feature-description:
+        description: 'Feature description for /speckit.specify'
+        required: false
+        default: ''
+      plan-prompt:
+        description: 'Optional prompt or summary to pass to /speckit.plan'
+        required: false
+        default: ''
+      tasks-options:
+        description: 'Optional options for /speckit.tasks'
+        required: false
+        default: ''
+      generate-tasks:
+        description: 'Whether to run /speckit.tasks (true/false)'
+        required: false
+        default: 'true'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set up Python (latest 3.x)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install --upgrade pip
+            pip install uwsgi
+          fi
+
+      - name: Install spec-kit
+        run: |
+          pip install --upgrade pip
+          pip install git+https://github.com/github/spec-kit.git
+
+      - name: Install uv
+        run: |
+          pip install --upgrade pip
+          pip install uv
+
+      - name: Run speckit.specify
+        env:
+          FEATURE_DESC: ${{ github.event.inputs['feature-description'] }}
+        run: |
+          if [ -n "$FEATURE_DESC" ]; then
+            echo "Running speckit.specify with description: $FEATURE_DESC"
+            uvx --from git+https://github.com/github/spec-kit.git specify "$FEATURE_DESC"
+          else
+            echo "No feature-description provided; skipping speckit.specify"
+          fi
+
+      - name: Run speckit.plan
+        env:
+          PLAN_PROMPT: ${{ github.event.inputs['plan-prompt'] }}
+        run: |
+          if [ -n "$PLAN_PROMPT" ]; then
+            echo "Running speckit.plan with prompt: $PLAN_PROMPT"
+            uvx --from git+https://github.com/github/spec-kit.git plan "$PLAN_PROMPT"
+          else
+            echo "Running speckit.plan with default (reading spec from repo)"
+            uvx --from git+https://github.com/github/spec-kit.git plan
+          fi
+
+      - name: Run speckit.tasks
+        if: ${{ github.event.inputs['generate-tasks'] == 'true' }}
+        env:
+          TASKS_OPTS: ${{ github.event.inputs['tasks-options'] }}
+        run: |
+          echo "Running speckit.tasks with options: $TASKS_OPTS"
+          if [ -n "$TASKS_OPTS" ]; then
+            uvx --from git+https://github.com/github/spec-kit.git tasks "$TASKS_OPTS"
+          else
+            uvx --from git+https://github.com/github/spec-kit.git tasks
+          fi
+
+      - name: Run uvx init
+        env:
+          PROJECT_NAME: ${{ github.event.inputs['project-name'] }}
+        run: |
+          echo "Running uvx specify init for project '$PROJECT_NAME'"
+          uvx --from git+https://github.com/github/spec-kit.git specify init "$PROJECT_NAME"
