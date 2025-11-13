@@ -93,15 +93,9 @@ jobs:
 
       - name: Run uvx init
         run: |
-          specify init --ai "$AI_MODEL" --script "$SCRIPT_TYPE" --force "$PROJECT_NAME"
-          echo "Generated files in: $PROJECT_NAME"
-          ls -la "$PROJECT_NAME" || echo "Directory not found"
-
-      - name: Move to projects directory
-        run: |
           mkdir -p projects
-          mv "$PROJECT_NAME" projects/ || true
-          ls -la projects/
+          cd projects
+          specify init --ai "$AI_MODEL" --script "$SCRIPT_TYPE" --force "$PROJECT_NAME"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -113,37 +107,35 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
+          
           # sanitize project name and create branch name
           RAW_NAME="${PROJECT_NAME:-}"
           if [ -z "$RAW_NAME" ]; then
             echo "PROJECT_NAME is empty; cannot create branch. Aborting commit step."
             exit 1
           fi
-
+          
           SANITIZED=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g' | sed -E 's/^-+|-+$//g')
           BRANCH_NAME="sdd/${SANITIZED}"
-
+          
           echo "Creating/using branch: $BRANCH_NAME"
-          git fetch origin --prune          
-          if git rev-parse --verify --quiet "$BRANCH_NAME" >/dev/null 2>&1; then
+          # create branch (or switch to it if exists)
+          git fetch origin --prune
+          if git rev-parse --verify --quiet "$BRANCH_NAME" >/dev/null; then
             git checkout "$BRANCH_NAME"
           else
             git checkout -b "$BRANCH_NAME"
           fi
-
-          # export branch name as step output for next steps
-          echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
-
-          # add all changes (including projects directory)
+          
+          # export branch name for subsequent steps
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+          
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
-            echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             git commit -m "chore(sdd): add generated spec/plan/tasks files [skip ci]"
             git push --set-upstream origin "$BRANCH_NAME"
-            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Pull Request
