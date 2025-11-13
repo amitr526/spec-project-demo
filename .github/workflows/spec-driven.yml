@@ -144,5 +144,6 @@ jobs:
           title: "sdd: generated files for ${{ steps.commit.outputs.BRANCH_NAME }}"
           body: "This pull request contains specification-driven generated files (spec/plan/tasks) created by the SDD workflow."
           branch: "${{ steps.commit.outputs.BRANCH_NAME }}"
-          base: main
           draft: ${{ github.event.inputs['pr-draft'] == 'true' }}
+          labels: |
+            automated pr
