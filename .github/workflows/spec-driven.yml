@@ -10,6 +10,33 @@ on:
         description: 'Project name to initialize'
         required: true
         default: 'demo'
+      ai:
+        description: 'AI model to use'
+        required: false
+        default: 'copilot'
+        type: choice
+        options:
+          - claude
+          - gemini
+          - copilot
+          - cursor-agent
+          - qwen
+          - opencode
+          - codex
+          - windsurf
+          - kilocode
+          - auggie
+          - codebuddy
+          - amp
+          - q
+      script:
+        description: 'Script type to use'
+        required: false
+        default: 'sh'
+        type: choice
+        options:
+          - sh
+          - ps
       pr-draft:
         description: 'Create the pull request as a draft (true/false)'
         required: false
@@ -33,6 +60,8 @@ jobs:
         run: |
           echo "PROJECT_NAME=${{ github.event.inputs['project-name'] }}" >> $GITHUB_ENV
           echo "PR_DRAFT=${{ github.event.inputs['pr-draft'] }}" >> $GITHUB_ENV
+          echo "AI_MODEL=${{ github.event.inputs['ai'] }}" >> $GITHUB_ENV
+          echo "SCRIPT_TYPE=${{ github.event.inputs['script'] }}" >> $GITHUB_ENV
           echo "PR_FILE_LIMIT=${{ github.event.inputs['pr-file-limit'] }}" >> $GITHUB_ENV
 
       - name: Set up Python (latest 3.x)
@@ -63,12 +92,12 @@ jobs:
 
       - name: Run uvx init
         run: |
-          specify init --force "$PROJECT_NAME"
+          specify init --ai "$AI_MODEL" --script "$SCRIPT_TYPE" --force "$PROJECT_NAME"
 
       - uses: actions/upload-artifact@v4
         with:
           name: sdd-generated
-          path: "$PROJECT_NAME" 
+          path: "$PROJECT_NAME"
 
       - name: Commit and push generated files
         run: |
