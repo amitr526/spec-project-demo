@@ -92,12 +92,13 @@ jobs:
 
       - name: Run uvx init
         run: |
+          cd projects
           specify init --ai "$AI_MODEL" --script "$SCRIPT_TYPE" --force "$PROJECT_NAME"
 
       - uses: actions/upload-artifact@v4
         with:
           name: sdd-generated
-          path: "$PROJECT_NAME"
+          path: "projects/$PROJECT_NAME"
 
       - name: Commit and push generated files
         run: |
