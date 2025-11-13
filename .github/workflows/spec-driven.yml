@@ -133,7 +133,9 @@ jobs:
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
           else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
             git commit -m "chore(sdd): add generated spec/plan/tasks files [skip ci]"
             git push --set-upstream origin "$BRANCH_NAME"
           fi
