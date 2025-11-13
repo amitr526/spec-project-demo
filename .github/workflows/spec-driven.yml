@@ -94,11 +94,19 @@ jobs:
       - name: Run uvx init
         run: |
           specify init --ai "$AI_MODEL" --script "$SCRIPT_TYPE" --force "$PROJECT_NAME"
+          echo "Generated files in: $PROJECT_NAME"
+          ls -la "$PROJECT_NAME" || echo "Directory not found"
+
+      - name: Move to projects directory
+        run: |
+          mkdir -p projects
+          mv "$PROJECT_NAME" projects/ || true
+          ls -la projects/
 
       - uses: actions/upload-artifact@v4
         with:
           name: sdd-spec
-          path: "$PROJECT_NAME/" # Upload an entire directory
+          path: projects/${{ github.event.inputs['project-name'] }}/
 
       - name: Commit and push generated files
         id: commit
@@ -117,9 +125,12 @@ jobs:
           BRANCH_NAME="sdd/${SANITIZED}"
 
           echo "Creating/using branch: $BRANCH_NAME"
+          
+          # fetch latest from origin
+          git fetch origin
+          
           # create branch (or switch to it if exists)
-          git fetch origin --prune
-          if git rev-parse --verify --quiet "$BRANCH_NAME" >/dev/null; then
+          if git rev-parse --verify --quiet "origin/$BRANCH_NAME" >/dev/null 2>&1; then
             git checkout "$BRANCH_NAME"
           else
             git checkout -b "$BRANCH_NAME"
@@ -128,16 +139,21 @@ jobs:
           # export branch name as step output for next steps
           echo "branch=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
+          # add all changes (including projects directory)
           git add -A
+          
+          # check if there are changes to commit
           if git diff --cached --quiet; then
             echo "No changes to commit"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             git commit -m "chore(sdd): add generated spec/plan/tasks files [skip ci]"
-            git push --set-upstream origin "$BRANCH_NAME"
+            git push --set-upstream origin "$BRANCH_NAME" || git push
+            echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Create Pull Request
-        if: steps.commit.outputs.branch
+        if: steps.commit.outputs.branch && steps.commit.outputs.has_changes == 'true'
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
