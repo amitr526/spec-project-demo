@@ -125,12 +125,8 @@ jobs:
           BRANCH_NAME="sdd/${SANITIZED}"
 
           echo "Creating/using branch: $BRANCH_NAME"
-          
-          # fetch latest from origin
-          git fetch origin
-          
-          # create branch (or switch to it if exists)
-          if git rev-parse --verify --quiet "origin/$BRANCH_NAME" >/dev/null 2>&1; then
+          git fetch origin --prune          
+          if git rev-parse --verify --quiet "$BRANCH_NAME" >/dev/null 2>&1; then
             git checkout "$BRANCH_NAME"
           else
             git checkout -b "$BRANCH_NAME"
@@ -141,14 +137,12 @@ jobs:
 
           # add all changes (including projects directory)
           git add -A
-          
-          # check if there are changes to commit
           if git diff --cached --quiet; then
             echo "No changes to commit"
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             git commit -m "chore(sdd): add generated spec/plan/tasks files [skip ci]"
-            git push --set-upstream origin "$BRANCH_NAME" || git push
+            git push --set-upstream origin "$BRANCH_NAME"
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
