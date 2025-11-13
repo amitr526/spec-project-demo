@@ -9,23 +9,7 @@ on:
       project-name:
         description: 'Project name to initialize'
         required: true
-        default: 'my-project'
-      feature-description:
-        description: 'Feature description for /speckit.specify'
-        required: false
-        default: ''
-      plan-prompt:
-        description: 'Optional prompt or summary to pass to /speckit.plan'
-        required: false
-        default: ''
-      tasks-options:
-        description: 'Optional options for /speckit.tasks'
-        required: false
-        default: ''
-      generate-tasks:
-        description: 'Whether to run /speckit.tasks (true/false)'
-        required: false
-        default: 'true'
+        default: 'demo'
       pr-draft:
         description: 'Create the pull request as a draft (true/false)'
         required: false
@@ -48,10 +32,6 @@ jobs:
       - name: Export workflow inputs to env
         run: |
           echo "PROJECT_NAME=${{ github.event.inputs['project-name'] }}" >> $GITHUB_ENV
-          echo "FEATURE_DESC=${{ github.event.inputs['feature-description'] }}" >> $GITHUB_ENV
-          echo "PLAN_PROMPT=${{ github.event.inputs['plan-prompt'] }}" >> $GITHUB_ENV
-          echo "TASKS_OPTS=${{ github.event.inputs['tasks-options'] }}" >> $GITHUB_ENV
-          echo "GENERATE_TASKS=${{ github.event.inputs['generate-tasks'] }}" >> $GITHUB_ENV
           echo "PR_DRAFT=${{ github.event.inputs['pr-draft'] }}" >> $GITHUB_ENV
           echo "PR_FILE_LIMIT=${{ github.event.inputs['pr-file-limit'] }}" >> $GITHUB_ENV
 
@@ -83,20 +63,12 @@ jobs:
 
       - name: Run uvx init
         run: |
-          specify init "$PROJECT_NAME"
+          specify init --force "$PROJECT_NAME"
 
-      - name: Run speckit.specify
-        run: |
-          specify specify "$FEATURE_DESC"
-
-      - name: Run speckit.plan
-        run: |
-          specify plan "$PLAN_PROMPT"
-
-      - name: Run speckit.tasks
-        if: ${{ github.event.inputs['generate-tasks'] == 'true' }}
-        run: |
-          specify tasks "$TASKS_OPTS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdd-generated
+          path: "$PROJECT_NAME" 
 
       - name: Commit and push generated files
         run: |
@@ -188,7 +160,6 @@ jobs:
           fi
 
           PAYLOAD=$(jq -n --arg t "sdd: generated files for $BRANCH_NAME" --arg h "$BRANCH_NAME" --arg b "main" --arg body "$BODY" --argjson d "$DRAFT_JSON" '{title: $t, head: $h, base: $b, body: $body, draft: $d}')
-
           echo "Creating pull request..."
           RESPONSE=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -d "$PAYLOAD" "https://api.github.com/repos/$REPO/pulls")
           echo "$RESPONSE" | jq -r '.html_url // .message'
