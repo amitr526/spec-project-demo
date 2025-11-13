@@ -26,6 +26,14 @@ on:
         description: 'Whether to run /speckit.tasks (true/false)'
         required: false
         default: 'true'
+      pr-draft:
+        description: 'Create the pull request as a draft (true/false)'
+        required: false
+        default: 'true'
+      pr-file-limit:
+        description: 'Number of changed files to list in the PR body (first N)'
+        required: false
+        default: '10'
 
 jobs:
   build:
@@ -44,6 +52,8 @@ jobs:
           echo "PLAN_PROMPT=${{ github.event.inputs['plan-prompt'] }}" >> $GITHUB_ENV
           echo "TASKS_OPTS=${{ github.event.inputs['tasks-options'] }}" >> $GITHUB_ENV
           echo "GENERATE_TASKS=${{ github.event.inputs['generate-tasks'] }}" >> $GITHUB_ENV
+          echo "PR_DRAFT=${{ github.event.inputs['pr-draft'] }}" >> $GITHUB_ENV
+          echo "PR_FILE_LIMIT=${{ github.event.inputs['pr-file-limit'] }}" >> $GITHUB_ENV
 
       - name: Set up Python (latest 3.x)
         uses: actions/setup-python@v4
@@ -87,3 +97,98 @@ jobs:
         if: ${{ github.event.inputs['generate-tasks'] == 'true' }}
         run: |
           specify tasks "$TASKS_OPTS"
+
+      - name: Commit and push generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # sanitize project name and create branch name
+          RAW_NAME="${PROJECT_NAME:-}"
+          if [ -z "$RAW_NAME" ]; then
+            echo "PROJECT_NAME is empty; cannot create branch. Aborting commit step."
+            exit 1
+          fi
+
+          SANITIZED=$(echo "$RAW_NAME" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g' | sed -E 's/^-+|-+$//g')
+          BRANCH_NAME="sdd/${SANITIZED}"
+
+          echo "Creating/using branch: $BRANCH_NAME"
+          # create branch (or switch to it if exists)
+          git fetch origin --prune
+          if git rev-parse --verify --quiet "$BRANCH_NAME" >/dev/null; then
+            git checkout "$BRANCH_NAME"
+          else
+            git checkout -b "$BRANCH_NAME"
+          fi
+
+          # export branch name for subsequent steps
+          echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(sdd): add generated spec/plan/tasks files [skip ci]"
+            git push --set-upstream origin "$BRANCH_NAME"
+          fi
+
+      - name: Create Pull Request (REST)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          OWNER="${REPO%%/*}"
+          BRANCH_NAME="${BRANCH_NAME:-}"
+          if [ -z "$BRANCH_NAME" ]; then
+            echo "BRANCH_NAME not set; skipping PR creation"
+            exit 0
+          fi
+
+          echo "Checking for existing PR from $OWNER:$BRANCH_NAME to main"
+          EXISTING=$(curl -s -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$REPO/pulls?head=$OWNER:$BRANCH_NAME&base=main")
+          if echo "$EXISTING" | grep -q '"number":'; then
+            echo "A pull request already exists for $BRANCH_NAME. Skipping creation."
+            exit 0
+          fi
+
+          # fetch remote refs and compute changed files
+          git fetch origin main
+          git fetch origin "$BRANCH_NAME"
+          CHANGED=$(git diff --name-only origin/main...origin/$BRANCH_NAME || true)
+          if [ -z "$CHANGED" ]; then
+            echo "No changed files between origin/main and origin/$BRANCH_NAME; skipping PR creation"
+            exit 0
+          fi
+
+          # limit the number of files shown in PR body
+          PR_FILE_LIMIT="${PR_FILE_LIMIT:-20}"
+          TOTAL=$(printf "%s\n" "$CHANGED" | wc -l | tr -d ' ')
+          FIRST_N=$(printf "%s\n" "$CHANGED" | head -n "$PR_FILE_LIMIT")
+          REMAINING=$((TOTAL - PR_FILE_LIMIT))
+          if [ "$REMAINING" -lt 0 ]; then
+            REMAINING=0
+          fi
+
+          # build a bullet list of the first N files
+          FILE_LIST=$(printf "%s\n" "$FIRST_N" | sed -e 's/^/- /')
+          if [ "$REMAINING" -gt 0 ]; then
+            FILE_LIST="$FILE_LIST\n... and $REMAINING more files"
+          fi
+
+          BODY=$(printf "This pull request contains specification-driven generated files (spec/plan/tasks) created by the SDD workflow.\n\nChanged files:\n%s" "$FILE_LIST")
+
+          # determine whether PR should be a draft (PR_DRAFT exported earlier)
+          PR_DRAFT="${PR_DRAFT:-true}"
+          if [ "$PR_DRAFT" = "true" ] || [ "$PR_DRAFT" = "True" ]; then
+            DRAFT_JSON=true
+          else
+            DRAFT_JSON=false
+          fi
+
+          PAYLOAD=$(jq -n --arg t "sdd: generated files for $BRANCH_NAME" --arg h "$BRANCH_NAME" --arg b "main" --arg body "$BODY" --argjson d "$DRAFT_JSON" '{title: $t, head: $h, base: $b, body: $body, draft: $d}')
+
+          echo "Creating pull request..."
+          RESPONSE=$(curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" -d "$PAYLOAD" "https://api.github.com/repos/$REPO/pulls")
+          echo "$RESPONSE" | jq -r '.html_url // .message'
