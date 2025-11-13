@@ -124,7 +124,7 @@ jobs:
           
           # export branch name for subsequent steps
           echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_OUTPUT
-                    
+
           git add -A
           if git diff --cached --quiet; then
             echo "No changes to commit"
@@ -143,6 +143,6 @@ jobs:
           commit-message: "chore(sdd): add generated spec/plan/tasks files"
           title: "sdd: generated files for ${{ steps.commit.outputs.BRANCH_NAME }}"
           body: "This pull request contains specification-driven generated files (spec/plan/tasks) created by the SDD workflow."
-          branch: ${{ steps.commit.outputs.BRANCH_NAME }}
+          branch: "${{ steps.commit.outputs.BRANCH_NAME }}"
           base: main
           draft: ${{ github.event.inputs['pr-draft'] == 'true' }}
